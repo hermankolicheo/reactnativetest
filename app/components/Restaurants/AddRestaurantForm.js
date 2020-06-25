@@ -1,18 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, ScrollView, Alert, Dimensions, Text } from "react-native";
+import { StyleSheet, View, ScrollView, Alert, Dimensions } from "react-native";
 import { Icon, Avatar, Image, Input, Button } from "react-native-elements";
 import { map, size, filter } from "lodash";
 import * as Permissions from "expo-permissions";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import MapView from "react-native-maps";
+import uuid from "random-uuid-v4";
+
 import Modal from "../Modal";
+import { firebaseApp } from "../../utils/firebase";
+import firebase from "firebase/app";
+import "firebase/storage";
+
 
 
 const widthScreen = Dimensions.get("window").width;
  
 export default function AddRestaurantForm(props) {
-  const { toastRef } = props;
+  const { toastRef, setIsLoading, navigation } = props;
   const [restaurantName, setRestaurantName] = useState("");
   const [restaurantAddress, setRestaurantAddress] = useState("");
   const [restaurantDescription, setRestaurantDescription] = useState("");
@@ -20,17 +26,46 @@ export default function AddRestaurantForm(props) {
   const [isVisibleMap, setIsVisibleMap] = useState(false);
   const [locationRestaurant, setLocationRestaurant] = useState(null);
 
-  const AddRestaurant = () => {
+  const AddRestaurant = (props) => {
     if(!restaurantName || !restaurantAddress || !restaurantDescription) {
       toastRef.current.show("Todos los campos del formulario son obligatorios");
     } else if (size(imagesSelected) === 0) {
-      toastRef.current.show("El restaurante debe tener al menos una foto");
+      toastRef.current.show("EL restaurante debe tener al menos una foto");
     } else if (!locationRestaurant) {
       toastRef.current.show("Debes ingresar la ubicación del Restaurante");
     } else {
-      console.log("ok");
+      setIsLoading(true);
+      UploadImageStorage().then((response) => {
+        console.log(response);
+        setIsLoading(false);
+      });
     }
   };
+
+  const UploadImageStorage = async () => {
+    const imageBlob = [];
+
+    await Promise.all(
+
+      map(imagesSelected, async (image) => {
+        const response = await fetch(image);
+        const blob = await response.blob();
+        const ref = firebase.storage().ref("restaurants").child(uuid());
+        await ref.put(blob).then(async (result) => {
+          await firebase 
+                .storage()
+                .ref(`restaurants/${result.metadata.name}`)
+                .getDownloadURL()
+                .then((photoUrl)=>{
+                  imageBlob.push(photoUrl);
+                });
+        });
+      })
+    );
+   
+    return imageBlob;
+  };
+
   return (
     <ScrollView style={styles.ScrollView}>
         <ImageRestaurant imageRestaurant= {imagesSelected[0]} />
@@ -39,6 +74,7 @@ export default function AddRestaurantForm(props) {
         setRestaurantAddress={setRestaurantAddress}
         setRestaurantDescription={setRestaurantDescription}
         setIsVisibleMap={setIsVisibleMap}
+        locationRestaurant={locationRestaurant}
       />
       <UploadImage
         toastRef={toastRef}
@@ -51,10 +87,10 @@ export default function AddRestaurantForm(props) {
         buttonStyle={styles.btnAddRestaurant}
       />
       <Map 
-      toastRef={toastRef}
       isVisibleMap={isVisibleMap} 
       setIsVisibleMap= {setIsVisibleMap}
       setLocationRestaurant= {setLocationRestaurant}
+      toastRef={toastRef}
       />
     </ScrollView>
   );
@@ -82,6 +118,7 @@ function FormAdd(props) {
     setRestaurantAddress,
     setRestaurantDescription,
     setIsVisibleMap,
+    locationRestaurant,
   } = props;
  
   return (
@@ -98,7 +135,7 @@ function FormAdd(props) {
         rightIcon={{
             type: "material-community",
             name: "google-maps",
-            color: "#c2c2c2",
+            color: locationRestaurant ? "#00a680" : "#c2c2c2",
             onPress: () => setIsVisibleMap(true),
         }}
       />
@@ -120,7 +157,6 @@ function Map(props) {
       setLocationRestaurant, 
       toastRef,
     } = props;
-
     const [location, setLocation] = useState(null);
 
     useEffect(() => {
@@ -135,7 +171,6 @@ function Map(props) {
                 toastRef.current.show("Debes conceder permisos de Localización", 3000)
             } else {
                 const loc = await Location.getCurrentPositionAsync({})
-                console.log(loc);
                 setLocation({
                     latitude: loc.coords.latitude,
                     longitude: loc.coords.longitude,
@@ -149,6 +184,7 @@ function Map(props) {
 
     const confirmLocation = () => {
       setLocationRestaurant(location);
+      toastRef.current.show("Ubicación registrada");
       setIsVisibleMap(false);
       
     };
@@ -190,7 +226,7 @@ function Map(props) {
         </Modal>
     )
 
-};
+}
  
 function UploadImage(props) {
   const { toastRef, imagesSelected, setImagesSelected } = props;
