@@ -7,13 +7,13 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import MapView from "react-native-maps";
 import uuid from "random-uuid-v4";
-
 import Modal from "../Modal";
+
 import { firebaseApp } from "../../utils/firebase";
 import firebase from "firebase/app";
 import "firebase/storage";
-
-
+import "firebase/firestore";
+const db = firebase.firestore(firebaseApp);
 
 const widthScreen = Dimensions.get("window").width;
  
@@ -36,8 +36,27 @@ export default function AddRestaurantForm(props) {
     } else {
       setIsLoading(true);
       UploadImageStorage().then((response) => {
-        console.log(response);
-        setIsLoading(false);
+
+        db.collection("restaurants")
+          .add({
+            name: restaurantName,
+            address: restaurantAddress,
+            description: restaurantDescription,
+            location: locationRestaurant,
+            images: response,
+            rating: 0,
+            ratingTotal: 0,
+            quantityVoting: 0,
+            createAt: new Date(),
+            createBy: firebase.auth().currentUser.uid,
+          })
+          .then(() => {
+            setIsLoading(false);
+            console.log("OK");
+          }).catch(() => {
+              setIsLoading(false);
+              toastRef.current.show("error al subir info");
+          });
       });
     }
   };
